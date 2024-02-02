@@ -12,69 +12,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Term1: Calculating Entropy for Each Cell
-def calculate_entropy(probabilities):
+def calculate_entropy(cell_probabilities):
     """Calculate entropy for a given probability distribution."""
-    #probabilities = np.array([float(p) for p in probabilities])
-    probabilities = np.array([p+1e-10 for p in probabilities])
-    total_sum = np.sum(probabilities)
 
-    # Calculate percentage
-    percentage = 100 * probabilities / total_sum
-    entropy = -np.sum(probabilities * np.log(probabilities + 1e-10))  # Avoid log(0) error
-    return entropy
+    entropies = []
 
+    for cell in cell_probabilities:
+        # Ensure no zero probabilities and convert to numpy array
+        probabilities = np.array([p + 1e-10 for p in cell])
 
-def compute_entropy(Gaussian_folder, cell_types_to_consider, query_cells ):
-        # Load means and variances for the cell types
-        means = {cell_type: np.load(os.path.join(Gaussian_folder, f'{cell_type}_mean.npy'))
-                 for cell_type in cell_types_to_consider}
-        covariances = {cell_type: np.load(os.path.join(Gaussian_folder, f'{cell_type}_cov.npy'))
-                       for cell_type in cell_types_to_consider}
+        # Calculate entropy
+        entropy = -np.sum(probabilities * np.log(probabilities))
+        entropies.append(entropy)
 
-        # Read priors
-        priors = utils.read_csv_column_perRow(
-            '../../files/scimilarity_trainingset_cellnum_AuthorLable_original.csv',
-            'Cell_Type', 'Number of Samples', cell_types_to_consider)
-
-        epsilon = 1e-10  # Small value to prevent log(0)
-
-        entropy_list = []
-        # Iterate over each cell
-        for cell in query_cells:
-            # Determine the cell types to consider for this cell
-            freq_mat = utils.make_frequency_matrix(cell.obs['sc_hits'])
-            freq_mat.columns = freq_mat.columns.str.replace(' ', '_')
-            cell_types_QC = freq_mat.columns.tolist()
-
-            # Likelihoods for this cell
-            likelihoods = {}
-            for cell_type in cell_types_QC:
-                pdf_value = multivariate_normal.pdf(cell,
-                                                    mean=means[cell_type].squeeze(),
-                                                    cov=covariances[cell_type].squeeze())
-                likelihoods[cell_type] = pdf_value + epsilon
-
-            # Evidence for this cell
-            evidence = sum(likelihoods[cell_type] * priors[cell_type] for cell_type in cell_types_QC)
-
-            # Posterior Probabilities for this cell
-            posterior_probabilities = {}
-            for cell_type in cell_types_QC:
-                posterior_prob = (likelihoods[cell_type] * priors[cell_type]) / evidence
-                posterior_probabilities[cell_type] = posterior_prob
-
-            # Entropy for this cell
-            probabilities_at_cell = [posterior_probabilities[cell_type] for cell_type in cell_types_QC]
-            entropy_at_cell = calculate_entropy(probabilities_at_cell)
-            entropy_list.append(entropy_at_cell)
-
-        return entropy_list, likelihoods
-
-        return entropy, likelihoods
+    return entropies
 
 
 # Term2: Log Density and Distance Multiplication
 def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
+
     term2_values = []
     for i in range(len(query_cell)):
         weighted_dist = 0
@@ -82,8 +38,7 @@ def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
         for ct1, ct2 in combinations(positive_log_densities.keys(), 2):
             distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
             weighted_dist += distance * positive_log_densities[ct1] * positive_log_densities[ct2]
-            # weighted_dist += distance * (positive_log_densities[ct1] + positive_log_densities[ct2])/2
-        weighted_dist = weighted_dist
+
         term2_values.append(weighted_dist)
         print("term2 cell no: ", i)
     return term2_values
@@ -96,7 +51,10 @@ def process_clusters(Y_clusters, S_cluster):
     adams_comp = sc.read(data_path)
     epsilon = 1e-10
 
-    final_results = {}  # Dictionary to store final results per cluster
+    # Initialize a dictionary to store results
+    plasticity_score_d = {}
+    entropy_d = {}
+    term2_d = {}
 
     for Y_cluster in Y_clusters:
 
@@ -116,53 +74,57 @@ def process_clusters(Y_clusters, S_cluster):
 
         final_results_per_cluster = []  # Store final results for each cell in this cluster
 
-        # loop over each qc
-        for qeury_cell in adams1:
+        cell = adams1.obsm['X_scimilarity']
 
-            # 1. Find the Cell Types
-            freq_mat = utils.make_frequency_matrix(qeury_cell.obs['sc_hits'])
-            freq_mat.columns = freq_mat.columns.str.replace(' ', '_')
-            cell_types_QC = freq_mat.columns.tolist()
+        # 2. Calculate Likelihood
+        likelihoods = {}
+        for cell_type in cell_types_to_consider:
+            pdf_value = multivariate_normal.pdf(cell,
+                                                mean=means[cell_type].squeeze(),
+                                                cov=covariances[cell_type].squeeze())
+            likelihoods[cell_type] = pdf_value + epsilon
 
-            cell = adams1.obsm['X_scimilarity']
-
-            # 2. Calculate Likelihood
-            likelihoods = {}
-            for cell_type in cell_types_QC:
-                pdf_value = multivariate_normal.pdf(cell,
-                                                    mean=means[cell_type].squeeze(),
-                                                    cov=covariances[cell_type].squeeze())
-                likelihoods[cell_type] = pdf_value + epsilon
-
-            # Evidence for this cell
-            evidence = sum(likelihoods[cell_type] * priors[cell_type] for cell_type in cell_types_QC)
+        # Evidence for this cell
+        evidence = sum(likelihoods[cell_type] * priors[cell_type] for cell_type in cell_types_to_consider)
 
 
-            # 4. Calculate Posterior Probability
-            posterior_probabilities = {ct: (likelihoods[ct] * priors[ct]) / evidence for ct in
-                                       cell_types_QC}
+        # 4. Calculate Posterior Probability
+        posterior_probabilities = {ct: (likelihoods[ct] * priors[ct]) / evidence for ct in
+                                   cell_types_to_consider}
 
-            # 5. Calculate Entropy (Term 1)
-            probabilities_at_cell = [posterior_probabilities[ct] for ct in cell_types_QC]
-            entropy = calculate_entropy(probabilities_at_cell)
+        # fetch information for every cell
+        num_cells = len(next(iter(posterior_probabilities.values())))
+        # Initialize a dictionary to store cell-wise data
+        cell_wise_data = [[] for _ in range(num_cells)]
 
-            # 6. Calculate Term 2
-            log_densities = {ct: np.log(likelihoods[ct] + epsilon) for ct in cell_types_QC}
-            dist_matrix = np.load(bhatt_dist_path)
-            term2 = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell)
+        # Iterate over each row and distribute its data to the respective cells
+        for row in posterior_probabilities.values():
+            for cell_index, cell_value in enumerate(row):
+                cell_wise_data[cell_index].append(cell_value)
 
-            # 7. Calculate Final Result
-            final_result = entropy * term2
-            final_results_per_cluster.append(final_result)
+        # 5. Calculate Entropy (Term 1)
+        cell_wise_prob = [np.array(cell) for cell in cell_wise_data]
+        entropy_arr = calculate_entropy(cell_wise_prob)
 
-        final_results[Y_cluster] = final_results_per_cluster
+        # 6. Calculate Term 2
+        log_densities = {ct: np.log(likelihoods[ct] + epsilon) for ct in cell_types_to_consider}
+        dist_matrix = np.load(bhatt_dist_path)
+        term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell)
 
-    return final_results
+        # 7. Calculate Final Result
+        plasticity_score_arr = [e * t2 for e, t2 in zip(entropy_arr, term2_arr)]
+
+        # create dictionary for every Y cluster
+        entropy_d[Y_cluster] = entropy_arr
+        term2_d[Y_cluster] = term2_arr
+        plasticity_score_d[Y_cluster] = plasticity_score_arr
+
+    return entropy_d, term2_d, plasticity_score_d
 
 
 S_cluster = ""
 Y_clusters = ["SCLC-A", "T cell"]
-plasticity_score, entropy_d, term2_d = process_clusters(Y_clusters, S_cluster)
+entropy_d, term2_d, plasticity_score_d = process_clusters(Y_clusters, S_cluster)
 print()
 
 results = pd.Series(term2_d)
@@ -189,7 +151,7 @@ plt.grid()
 plt.savefig("../figures/"+utils_AT.create_image_name("entropy"))
 plt.show()
 
-results = pd.Series(plasticity_score)
+results = pd.Series(plasticity_score_d)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
