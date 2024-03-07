@@ -58,7 +58,7 @@ def process_clusters(Y_clusters, S_cluster):
 
     for Y_cluster in Y_clusters:
 
-        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])]
+        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])][:5]
         freq_mat = utils.make_frequency_matrix(adams1.obs['sc_hits'])
         freq_mat.columns = freq_mat.columns.str.replace(' ', '_')
         cell_types_to_consider = freq_mat.columns.tolist()
@@ -124,6 +124,7 @@ def process_clusters(Y_clusters, S_cluster):
 
 S_cluster = ""
 Y_clusters = ["SCLC-A", "T cell"]
+#plasticity_score_d, entropy_d, term2_d = process_clusters(Y_clusters, S_cluster)
 entropy_d, term2_d, plasticity_score_d = process_clusters(Y_clusters, S_cluster)
 print()
 

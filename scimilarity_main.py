@@ -11,17 +11,19 @@ import csv
 """"  ###### VARIABLES ########  """
 
 # Select visualization options
-ALL = 1
+ALL = 0
 clstr = 0
 uncnstrnd_prdctn = 0
 cnstrnd_prdctn = 0
-min_dist = 1
-gene_score = 1
+min_dist = 0
+gene_score = 0
 
 annotation_path = '../models/annotation_model_v1'
 # data_path = '../data/GSE136831_subsample.h5ad'
 # data_path = '../data/KPTracer-Data/expression/adata_processed.combined.h5ad' #(AT)
 # data_path = '../data/KPTracer-Data/expression/adata_processed_comp.h5ad' #(AT)
+
+#data_path = '../data/KPTracer-Data/expression/adata_combined_mnnc_010920_SCANTN2.h5ad'
 data_path = '../data/MSK_tumor_data/adata.combined.mnnc.010920.h5ad'
 imag_name1 = utils_AT.create_image_name("_ MSK_tumorClstrCOMP_")
 imag_name2 = utils_AT.create_image_name("_ MSK_tumorConstrndAntnCOMP_")
@@ -60,7 +62,7 @@ adams.obsm['X_scimilarity'] = ca.get_embeddings(adams.X)
 sc.pp.neighbors(adams, use_rep='X_scimilarity')
 sc.tl.umap(adams)
 
-adams.write('../data/MSK_tumor_data/adata_combined_mnnc_010920_Scimilarity.h5ad')
+# adams.write('../data/MSK_tumor_data/adata_combined_mnnc_010920_Scimilarity.h5ad')
 
 # Visualization
 if ALL or clstr:
