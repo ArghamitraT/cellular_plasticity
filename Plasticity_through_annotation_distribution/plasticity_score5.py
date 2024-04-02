@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import pandas as pd
+np.float = float
 import scanpy as sc
 
 import utils_AT
@@ -26,7 +27,7 @@ def calculate_entropy(cell_probabilities): #is this a 2-d array?
         entropies.append(entropy)
     #print("printing entropies")
     #print(entropies)
-
+    #print("printing entropies: ", entropies)
     #okay so for each cell_type there is an association 
     return entropies #return entropy for each cell -> type ->list
 
@@ -36,9 +37,11 @@ def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
     #what exactly is each input type? 
     term2_values = []
     print(len(query_cell))
+    #print("distance matrix dimensions",len(dist_matrix),len(dist_matrix[0]))
+    #print("printing distance matrix: ", dist_matrix)
     for i in range(len(query_cell)): #what holds into a query cell 
         weighted_dist = 0
-        print(log_densities) #this should be an array, but is a scalare 
+        #print(log_densities) #this should be an array, but is a scalare 
         positive_log_densities = {ct: log_densities[ct][i] for ct in cell_types if log_densities[ct][i] > 0}
         for ct1, ct2 in combinations(positive_log_densities.keys(), 2):
             distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
@@ -51,7 +54,9 @@ def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
 
 def process_clusters(Y_clusters, S_cluster):
    
-    data_path = 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2.h5ad'
+    #data_path = 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2_75.h5ad'
+    #data_path = 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2.h5ad'
+    data_path = os.path.join(os.getcwd(), 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2_150.h5ad')
     gaussian_path = os.path.join(os.getcwd(), 'data/scimilarity_data_division/fitted_gaussian_noGMM')
     bhatt_dist_path = os.path.join(os.getcwd(), 'data/scimilarity_data_division/bhatt_dist_NO_GMM.npy')
 
@@ -65,11 +70,11 @@ def process_clusters(Y_clusters, S_cluster):
 
     for Y_cluster in Y_clusters:
 
-        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])]#[:5] #means choosing 5 cells 
+        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])][:5] #means choosing 5 cells 
         freq_mat = utils.make_frequency_matrix(adams1.obs['sc_hits'])
         print("freq mat")
-        print(freq_mat)
-        print(type(freq_mat))
+        #print(freq_mat)
+        #print(type(freq_mat))
         freq_mat.columns = freq_mat.columns.str.replace(' ', '_')   #use this to calculate entropy
         #normalize the data - to be probabilities instead of counts 
         #rows = freq_mat.rows
@@ -88,14 +93,14 @@ def process_clusters(Y_clusters, S_cluster):
         #print(freq_mat_normalized)
         freq_mat = freq_mat_normalized 
         print("freq mat normalized")
-        print(freq_mat)
+        #print(freq_mat)
         #for each row just get the total count and divide each by that value 
 
 
         
         cell_types_to_consider = freq_mat.columns.tolist()
-        print("cell types")
-        print(cell_types_to_consider)
+        print("freq mat")
+        #print(freq_mat)
         # load the fitted gaussian mean, variance an cell numbers
         
         means = {cell_type: np.load(os.path.join(gaussian_path, f'{cell_type}_mean.npy'))
@@ -120,11 +125,15 @@ def process_clusters(Y_clusters, S_cluster):
 
         # Evidence for this cell
         evidence = sum(likelihoods[cell_type] * priors[cell_type] for cell_type in cell_types_to_consider)
-
+        
+        print("priors", priors)
+        print("prior for specific cell type: ", priors[cell_type])
 
         # 4. Calculate Posterior Probability
         posterior_probabilities = {ct: (likelihoods[ct] * priors[ct]) / evidence for ct in
                                    cell_types_to_consider}
+
+        print("posterior probs: ", posterior_probabilities)
 
         # fetch information for every cell
         num_cells = len(next(iter(posterior_probabilities.values())))
@@ -141,7 +150,7 @@ def process_clusters(Y_clusters, S_cluster):
         cell_wise_data_simple = freq_mat.values.tolist()
         #print(len(cell_wise_data))
         #print(len(cell_wise_data[0]))
-        #print(cell_wise_data)
+        #print(cell_wise_data_simple)
 
         cell_wise_prob_simple = [np.array(cell) for cell in cell_wise_data_simple]
         entropy_arr = calculate_entropy(cell_wise_prob_simple)
@@ -161,7 +170,18 @@ def process_clusters(Y_clusters, S_cluster):
             likelihoods[cell_type] = pdf_value + epsilon
         log_densities = {ct: np.log(likelihoods[ct] + epsilon) for ct in cell_types_to_consider}
         dist_matrix = np.load(bhatt_dist_path)
-        term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell) #apparently cell is an int 
+        #print("printing dist matrix: ", dist_matrix)
+        #build normalized dist_matrix
+        dist_matrix_normalized = np.zeros((len(dist_matrix),len(dist_matrix)))
+        for i,row in enumerate(dist_matrix):
+            total = np.sum(row)
+            for j, value in enumerate(row):
+                dist_matrix_normalized[i][j] = value/total
+        #print("printing dist matrix normalized: ", dist_matrix_normalized)
+
+
+        term2_arr = calculate_term2(dist_matrix_normalized, log_densities, cell_types_to_consider, cell)
+        #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell) #apparently cell is an int 
 
         # 7. Calculate Final Result
         plasticity_score_arr = [e * t2 for e, t2 in zip(entropy_arr, term2_arr)]
@@ -180,19 +200,52 @@ entropy_d, term2_d, plasticity_score_d = process_clusters(Y_clusters, S_cluster)
 print("stuff generated")
 
 
-results = pd.Series(term2_d)
-plt.figure(figsize=(16, 10))
-colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
-sns.violinplot(data=results)
-plt.xticks(ticks=range(len(results.index)), labels=results.index)
-plt.xlabel("Cell clusters")
-plt.ylabel("term 2")
-plt.title("MSK Lung cancer data")
-plt.grid()
-plt.savefig("figures/"+utils_AT.create_image_name("term2"))
-plt.show()
+def create_df(term_dict):
+    SLC = term_dict['SCLC-A']
+    T = term_dict['T cell']   
+    #T.append(.625)
+    data = {
+    'SLC-A' : np.array(SLC),
+    'T-cell' : np.array(T)
+    }
+    maxsize = max([a.size for a in data.values()])
+    data_pad = {k:np.pad(v, pad_width=(0,maxsize-v.size,), mode='constant', constant_values=np.nan) for k,v in data.items()}
+    df = pd.DataFrame(data_pad)
+    return df
 
-results = pd.Series(entropy_d)
+def create_two_charts(term_dict,label):
+    SLC = term_dict['SCLC-A']
+    T = term_dict['T cell']   
+    #T.append(.625)
+    sdf = pd.DataFrame.from_dict(SLC)
+    tdf = pd.DataFrame.from_dict(T)
+    plt.figure(figsize=(16, 10))
+    colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
+    sns.violinplot(data=sdf)
+    plt.xlabel("SLC-A")
+    plt.ylabel(label)
+    plt.title("MSK Lung cancer data")
+    plt.grid()
+    plt.savefig("figures/"+utils.create_image_name(label+"SLC"))
+
+    plt.figure(figsize=(16, 10))
+    colors = ['orange', 'lightgreen', 'violet']  # Define colors for each cluster
+    sns.violinplot(data=tdf)
+    plt.xlabel("T cell")
+    plt.ylabel(label)
+    plt.title("MSK Lung cancer data")
+    plt.grid()
+    plt.savefig("figures/"+utils.create_image_name(label+"T"))
+    print("done")
+    return "done"
+
+'''pd.DataFrame.from_dict(entropy_d).to_csv('entropy_d.csv', index=False)
+pd.DataFrame.from_dict(term2_d).to_csv('term2_d.csv', index=False)
+pd.DataFrame.from_dict(plasticity_score_d).to_csv('plasticity_score_d.csv', index=False)'''
+'''results = pd.Series(entropy_d)
+#results = pd.DataFrame(results_temp)
+print("printing entropy")
+print(results)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
@@ -201,20 +254,85 @@ plt.xlabel("Cell clusters")
 plt.ylabel("entropy")
 plt.title("MSK Lung cancer data")
 plt.grid()
-plt.savefig("figures/"+utils_AT.create_image_name("entropy"))
-plt.show()
+plt.savefig("figures/"+utils_AT.create_image_name("entropy"))'''
+#plt.savefig("entropy_test.png")
+#plt.show()th
 
-results = pd.Series(plasticity_score_d)
+
+
+#print(term2_d)
+'''SLC = term2_d['SCLC-A']
+T = term2_d['T cell']
+#print(SLC)
+print(len(SLC))
+T.append(.625)
+print(len(T))
+data = {
+    'SLC-A' : np.array(SLC),
+    'T-cell' : np.array(T)
+}
+
+maxsize = max([a.size for a in data.values()])
+data_pad = {k:np.pad(v, pad_width=(0,maxsize-v.size,), mode='constant', constant_values=np.nan) for k,v in data.items()}
+df = pd.DataFrame(data_pad)
+print(df)'''
+#results = pd.DataFrame(SLC,T).tranpose()
+#results = results.set_axis(['SCLC-A','T cell'], axis=1)
+#results = pd.DataFrame.from_dict(term2_d)
+
+
+#junk = create_two_charts(entropy_d,"entropy")
+#junk1 = create_two_charts(plasticity_score_d,"plasticity_score")
+#junk2 = create_two_charts(term2_d,"term2")
+
+
+results = create_df(term2_d)
+print("printing term2 results")
+print(results)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
-plt.xticks(ticks=range(len(results.index)), labels=results.index)
+#plt.xticks(ticks=range(len(results.index)), labels=results.index)
+plt.xlabel("Cell clusters")
+plt.ylabel("term 2")
+plt.title("MSK Lung cancer data")
+plt.grid()
+#plt.savefig("figures/"+utils_AT.create_image_name("term2"))
+plt.savefig("figures/"+utils.create_image_name("term2"))
+plt.show()
+
+#results = pd.DataFrame.from_dict(entropy_d)
+results = create_df(entropy_d)
+print("printing entropy results")
+print(results)
+plt.figure(figsize=(16, 10))
+colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
+sns.violinplot(data=results)
+#plt.xticks(ticks=range(len(results.index)), labels=results.index)
+plt.xlabel("Cell clusters")
+plt.ylabel("entropy")
+plt.title("MSK Lung cancer data")
+plt.grid()
+#plt.savefig("figures/"+utils_AT.create_image_name("entropy"))
+plt.savefig("figures/"+utils.create_image_name("entropy"))
+#plt.savefig("entropy_test.png")
+plt.show()
+
+#results = pd.DataFrame.from_dict(plasticity_score_d)
+results = create_df(plasticity_score_d)
+print("printing plasticity results")
+print(results)
+plt.figure(figsize=(16, 10))
+colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
+sns.violinplot(data=results)
+#plt.xticks(ticks=range(len(results.index)), labels=results.index)
 plt.xlabel("Cell clusters")
 plt.ylabel("plasticity_score")
 plt.title("MSK Lung cancer data")
 plt.grid()
-plt.savefig("figures/"+utils_AT.create_image_name("plasticty_score"))
-plt.show()
+#plt.savefig("figures/"+utils_AT.create_image_name("plasticty_score"))
+plt.savefig("figures/"+utils.create_image_name("plasticty_score"))
+#plt.show()
 print()
 
 
