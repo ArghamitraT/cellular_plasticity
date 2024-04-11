@@ -36,7 +36,7 @@ def calculate_entropy(cell_probabilities): #is this a 2-d array?
 def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
     #what exactly is each input type? 
     term2_values = []
-    print(len(query_cell))
+    #print(len(query_cell))
     #print("distance matrix dimensions",len(dist_matrix),len(dist_matrix[0]))
     #print("printing distance matrix: ", dist_matrix)
     for i in range(len(query_cell)): #what holds into a query cell 
@@ -50,6 +50,120 @@ def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
         term2_values.append(weighted_dist)
         #print("term2 cell no: ", i)
     return term2_values
+
+def calculate_term2_updated(dist_matrix,cell_types,query_cell, freq_mat):
+    #for a given query cell 
+    #Sprint("query cell: ", query_cell)
+    #print("dist_matrix: ", dist_matrix)
+    #print("freq mat: ", freq_mat)
+    #print("printing cell_types: ", cell_types)
+    term2_values = []
+    #goal, get the freq mat with the keys and the row value where row_val > 0
+
+    print("printing freq mat: ",freq_mat)
+    #get 1st row where vals > 0 
+    #print("printing first row of freq mat", freq_mat.iloc[0]) #-> this actually did get the first val w labels 
+    freq_mat_row = freq_mat.iloc[0]
+    print("printing first row of freq mat",freq_mat_row)
+    #now remove the zero_value 
+    #for x in freq_mat_row.keys():
+    freq_mat_row_pruned = freq_mat_row.loc[freq_mat_row > 0]    
+    print("printing pruned freq mat",freq_mat_row_pruned)
+    print("new cell types to consider", freq_mat_row_pruned.keys().tolist())
+
+    freq = freq_mat.values.tolist()
+    print("number of cells checking: ", len(freq[0]))
+    #print("length of query cell is: ", len(query_cell))
+    #print("distance matrix dimensions",len(dist_matrix),len(dist_matrix[0]))
+    #print("printing distance matrix: ", dist_matrix)
+    for i in range(len(query_cell)): #what holds into a query cell 
+        #positive_log_densities = {ct: log_densities[ct][i] for ct in cell_types if log_densities[ct][i] > 0}
+        if i%50 == 0:
+            print("we are on iteration: ", i)
+        weighted_dist = 0
+        #freq_mat = freq_mat
+
+        #breaking it down to a row work:
+        desired_row = freq_mat.iloc[i] #gets row
+        pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
+        weight_cell_types = pruned_row.keys().tolist()
+        #freq_mat.columns.tolist()
+        current_cell = i
+        current_freq = freq[current_cell]
+        print("printing current freq table: ", current_freq)
+        #for ct1, ct2 in combinations(freq_mat.keys(), 2):
+        for ct1, ct2 in combinations(weight_cell_types, 2):
+            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
+            #print("printing current cell type ", current_cell)
+            current_cell = int(current_cell)
+            weight1 = freq[current_cell][weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
+            weight2 = freq[current_cell][weight_cell_types.index(ct2)]
+            #print(ct1, ct2)
+            #print(cell_types.index(ct1), " ",cell_types.index(ct2), " ")
+            #print(weight1)
+            #print(weight2)
+            weight = (weight1 + weight2)/2
+            #print('weight: ',weight)
+            #print('distance: ', distance)
+            weighted_dist += distance * weight
+        #print("totoal weighted is: ", weighted_dist)
+        term2_values.append(weighted_dist)
+        #print("term2 cell no: ", i)
+    return term2_values
+
+
+
+    #return query_cell
+
+def calculate_term2_speed_updated(dist_matrix,cell_types,query_cell, freq_mat):
+    term2_values = []
+    freq = freq_mat.values.tolist()
+    print("number of cells checking: ", len(freq[0])) #just for seeing progress purposes 
+    for i in range(len(query_cell)): #what holds into a query cell 
+        if i%50 == 0:
+            print("we are on iteration: ", i)
+        weighted_dist = 0
+        #freq_mat = freq_mat
+
+        #breaking it down to a row work:
+        desired_row = freq_mat.iloc[i] #gets row
+        pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
+        weight_cell_types = pruned_row.keys().tolist()
+
+        #freq_mat.columns.tolist()
+        current_cell = i
+        
+        ### TODO ####
+        ### implement multiplication of term 2 with numpy to speed up more ####s
+
+
+        final_freq = pruned_row.tolist()
+        #for ct1, ct2 in combinations(freq_mat.keys(), 2):
+        for ct1, ct2 in combinations(weight_cell_types, 2):
+            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
+            
+            weight1 = final_freq[weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
+            weight2 = final_freq[weight_cell_types.index(ct2)]
+            #print(ct1, ct2)
+            #print(cell_types.index(ct1), " ",cell_types.index(ct2), " ")
+            #print(weight1)
+            #print(weight2)
+            weight = (weight1 + weight2)/2
+            #print('weight: ',weight)
+            #print('distance: ', distance)
+            weighted_dist += distance * weight
+        #print("totoal weighted is: ", weighted_dist)
+
+        ### TODO -> divide my number of combinations -> ie avg instead of sum ###
+
+
+        if weighted_dist < 0:
+            print("happening: ", weighted_dist)
+        term2_values.append(weighted_dist)
+        #print("term2 cell no: ", i)
+    return term2_values
+
+
 
 
 def process_clusters(Y_clusters, S_cluster):
@@ -70,7 +184,7 @@ def process_clusters(Y_clusters, S_cluster):
 
     for Y_cluster in Y_clusters:
 
-        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])][:5] #means choosing 5 cells 
+        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])]#[:5] #means choosing 5 cells 
         freq_mat = utils.make_frequency_matrix(adams1.obs['sc_hits'])
         print("freq mat")
         #print(freq_mat)
@@ -99,7 +213,7 @@ def process_clusters(Y_clusters, S_cluster):
 
         
         cell_types_to_consider = freq_mat.columns.tolist()
-        print("freq mat")
+        #print("cell_types_to_consider", cell_types_to_consider)
         #print(freq_mat)
         # load the fitted gaussian mean, variance an cell numbers
         
@@ -126,14 +240,13 @@ def process_clusters(Y_clusters, S_cluster):
         # Evidence for this cell
         evidence = sum(likelihoods[cell_type] * priors[cell_type] for cell_type in cell_types_to_consider)
         
-        print("priors", priors)
-        print("prior for specific cell type: ", priors[cell_type])
+        
 
         # 4. Calculate Posterior Probability
         posterior_probabilities = {ct: (likelihoods[ct] * priors[ct]) / evidence for ct in
                                    cell_types_to_consider}
 
-        print("posterior probs: ", posterior_probabilities)
+        #print("posterior probs: ", posterior_probabilities)
 
         # fetch information for every cell
         num_cells = len(next(iter(posterior_probabilities.values())))
@@ -146,8 +259,20 @@ def process_clusters(Y_clusters, S_cluster):
         #        cell_wise_data[cell_index].append(cell_value)
         
         # 5. Calculate Entropy (Term 1)
-        print("cell wise data")
+        
+        #print("cell wise data")
         cell_wise_data_simple = freq_mat.values.tolist()
+
+        '''
+        print("priors", priors)
+        print("specific cell type: ", cell_type)
+        print("prior for specific cell type: ", priors[cell_type])
+        print("cell wise data", freq_mat)'''
+
+
+        #include priors 
+        
+
         #print(len(cell_wise_data))
         #print(len(cell_wise_data[0]))
         #print(cell_wise_data_simple)
@@ -172,17 +297,24 @@ def process_clusters(Y_clusters, S_cluster):
         dist_matrix = np.load(bhatt_dist_path)
         #print("printing dist matrix: ", dist_matrix)
         #build normalized dist_matrix
-        dist_matrix_normalized = np.zeros((len(dist_matrix),len(dist_matrix)))
+        '''dist_matrix_normalized = np.zeros((len(dist_matrix),len(dist_matrix)))
         for i,row in enumerate(dist_matrix):
             total = np.sum(row)
             for j, value in enumerate(row):
                 dist_matrix_normalized[i][j] = value/total
         #print("printing dist matrix normalized: ", dist_matrix_normalized)
+        #print("printing distance matrix: ", dist_matrix)
+        print("norm freq matrix: ", dist_matrix)'''
 
-
-        term2_arr = calculate_term2(dist_matrix_normalized, log_densities, cell_types_to_consider, cell)
+        #print("printing a specific spot in freq mat: ", freq_mat_normalized)
+        #print("what is freq_mat?: ", freq_mat_normalized.values.tolist()[0][0])
+        #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell)
+        print("before term 2")
+        #term2_arr = calculate_term2_updated(dist_matrix,cell_types_to_consider,cell, freq_mat)
+        term2_arr = calculate_term2_speed_updated(dist_matrix,cell_types_to_consider,cell, freq_mat)
+        print("after term 2")
         #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell) #apparently cell is an int 
-
+        #print(freq_mat)
         # 7. Calculate Final Result
         plasticity_score_arr = [e * t2 for e, t2 in zip(entropy_arr, term2_arr)]
 
@@ -287,8 +419,8 @@ print(df)'''
 
 
 results = create_df(term2_d)
-print("printing term2 results")
-print(results)
+#print("printing term2 results")
+#print(results)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
@@ -303,8 +435,8 @@ plt.show()
 
 #results = pd.DataFrame.from_dict(entropy_d)
 results = create_df(entropy_d)
-print("printing entropy results")
-print(results)
+#print("printing entropy results")
+#print(results)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
@@ -320,8 +452,8 @@ plt.show()
 
 #results = pd.DataFrame.from_dict(plasticity_score_d)
 results = create_df(plasticity_score_d)
-print("printing plasticity results")
-print(results)
+#print("printing plasticity results")
+#print(results)
 plt.figure(figsize=(16, 10))
 colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
 sns.violinplot(data=results)
