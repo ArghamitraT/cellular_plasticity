@@ -33,6 +33,7 @@ def calculate_entropy(cell_probabilities): #is this a 2-d array?
 
 
 # Term2: Log Density and Distance Multiplication
+#Term2 Previous Version 
 def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
     #what exactly is each input type? 
     term2_values = []
@@ -51,6 +52,7 @@ def calculate_term2(dist_matrix, log_densities, cell_types, query_cell):
         #print("term2 cell no: ", i)
     return term2_values
 
+#Term2 Version 1
 def calculate_term2_updated(dist_matrix,cell_types,query_cell, freq_mat):
     #for a given query cell 
     #Sprint("query cell: ", query_cell)
@@ -115,12 +117,160 @@ def calculate_term2_updated(dist_matrix,cell_types,query_cell, freq_mat):
 
     #return query_cell
 
+#Term2 Version 2
 def calculate_term2_speed_updated(dist_matrix,cell_types,query_cell, freq_mat):
     term2_values = []
     freq = freq_mat.values.tolist()
     print("number of cells checking: ", len(freq[0])) #just for seeing progress purposes 
     for i in range(len(query_cell)): #what holds into a query cell 
-        if i%50 == 0:
+        if i%100 == 0:
+            print("we are on iteration: ", i)
+        weighted_dist = 0
+        #breaking it down to a row work:
+        desired_row = freq_mat.iloc[i] #gets row
+        pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
+        weight_cell_types = pruned_row.keys().tolist()
+        final_freq = pruned_row.tolist()
+        #for ct1, ct2 in combinations(freq_mat.keys(), 2):
+        for ct1, ct2 in combinations(weight_cell_types, 2):
+            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]    
+            weight1 = final_freq[weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
+            weight2 = final_freq[weight_cell_types.index(ct2)]
+            weight = (weight1 + weight2)/2
+            weighted_dist += distance * weight
+        if weighted_dist < 0:
+            print("happening: ", weighted_dist)
+        term2_values.append(weighted_dist)
+        #print("term2 cell no: ", i)
+    return term2_values
+
+#Term2 Version 3 
+def calculate_term2_speed_averages(dist_matrix,cell_types,query_cell, freq_mat):
+    term2_values = []
+    freq = freq_mat.values.tolist()
+    outlier_10 = []
+    norm_10 = []
+    outlier_count = 0 
+    norm_count = 0 
+
+    query_cell_names = freq_mat.index.tolist()
+    for i in range(len(query_cell)): #what holds into a query cell 
+        if i%100 == 0:
+            print("we are on iteration: ", i)
+        weighted_dist = 0
+        desired_row = freq_mat.iloc[i] #gets row
+        pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
+        weight_cell_types = pruned_row.keys().tolist()
+        final_freq = pruned_row.tolist()
+        counter = 0
+        combos = combinations(weight_cell_types, 2)
+        for ct1, ct2 in combinations(weight_cell_types, 2):
+            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
+            weight1 = final_freq[weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
+            weight2 = final_freq[weight_cell_types.index(ct2)]
+            weight = (weight1 + weight2)/2
+            weighted_dist += distance * weight
+            counter += 1 
+        #print("length of counter is: ", counter)
+        try:
+            avg_weighted_distance = weighted_dist/counter
+        except: 
+            avg_weighted_distance = 0 
+        term2_values.append(avg_weighted_distance)
+        if norm_count < 10:
+            if avg_weighted_distance >= 1 and avg_weighted_distance <=3:
+                norm_10.append(query_cell_names[i])
+                norm_count += 1
+        if  outlier_count < 10:
+            if avg_weighted_distance >= 9 and avg_weighted_distance <=11:
+                outlier_10.append(query_cell_names[i])
+                outlier_count += 1
+
+        #print("term2 cell no: ", i)
+    print("printing normal set: ", norm_10)
+    print("printing outlier set: ", outlier_10)
+    outlier_write(norm_10,outlier_10,freq_mat)
+    return term2_values
+
+#Term2 Version 4
+def calculate_term2_speed_multiplcation(dist_matrix,cell_types,query_cell, freq_mat):
+    term2_values = []
+    freq = freq_mat.values.tolist()
+    print("number of cells checking: ", len(freq[0])) #just for seeing progress purposes 
+    for i in range(len(query_cell)): #what holds into a query cell 
+        if i%100 == 0:
+            print("we are on iteration: ", i)
+        weighted_dist = 0
+        #freq_mat = freq_mat
+        #breaking it down to a row work:
+        desired_row = freq_mat.iloc[i] #gets row
+        pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
+        weight_cell_types = pruned_row.keys().tolist()
+        final_freq = pruned_row.tolist()
+        #for ct1, ct2 in combinations(freq_mat.keys(), 2):
+        for ct1, ct2 in combinations(weight_cell_types, 2):
+            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
+            
+            weight1 = final_freq[weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
+            weight2 = final_freq[weight_cell_types.index(ct2)]
+            weight = weight1*weight2
+            weighted_dist += distance * weight
+        if weighted_dist < 0:
+            print("happening: ", weighted_dist)
+        term2_values.append(weighted_dist)
+        #print("term2 cell no: ", i)
+    return term2_values
+
+
+
+
+#this was just used for a little bit of analysis on outlier values ---- can be ignored unless needed again 
+def outlier_write(norm_10,outlier_10, freq_mat):
+    #given names in each, get dataframes of each 
+    #print("printing freq mat: ", freq_mat)
+    outlier_frame = freq_mat.loc[outlier_10]
+    norm_frame =  freq_mat.loc[norm_10]
+    
+    #now get the average number where the value is greater than 0 
+    #first outliers 
+    o_count = len(outlier_frame)
+    o_non_zero_count = 0
+    for row_index in range(o_count):
+            row = outlier_frame.iloc[row_index] #gets all values in that row
+            for cell in row:
+                if cell > 0:
+                    o_non_zero_count += 1 
+    try:
+        o_avg_length = o_non_zero_count/o_count
+    except: 
+        o_avg_length = 0
+    print("length of outlier frame: ", o_count)
+    #second normal 
+    n_count = len(norm_frame)
+    print("length of normal frame: ", n_count)
+    n_non_zero_count = 0
+    for row_index in range(n_count):
+            row = norm_frame.iloc[row_index] #gets all values in that row
+            for cell in row:
+                if cell > 0:
+                    n_non_zero_count += 1 
+    try:
+        n_avg_length = n_non_zero_count/n_count
+    except:
+        n_avg_length = 0
+
+    
+    print("outlier data frame: ", o_avg_length)
+    print("normal data frame: ", n_avg_length)
+
+#this was an attempt to use numpy to speed up calculations
+#however, bottleneck is 
+def calculate_term2_numpy(dist_matrix,cell_types,query_cell, freq_mat):
+    term2_values = []
+    freq = freq_mat.values.tolist()
+    print("number of cells checking: ", len(freq[0])) #just for seeing progress purposes 
+    for i in range(len(query_cell)): #what holds into a query cell 
+        if i%100 == 0:
             print("we are on iteration: ", i)
         weighted_dist = 0
         #freq_mat = freq_mat
@@ -129,39 +279,21 @@ def calculate_term2_speed_updated(dist_matrix,cell_types,query_cell, freq_mat):
         desired_row = freq_mat.iloc[i] #gets row
         pruned_row = desired_row.loc[desired_row > 0] #removes values of 0 
         weight_cell_types = pruned_row.keys().tolist()
-
-        #freq_mat.columns.tolist()
-        current_cell = i
-        
-        ### TODO ####
-        ### implement multiplication of term 2 with numpy to speed up more ####s
-
-
         final_freq = pruned_row.tolist()
         #for ct1, ct2 in combinations(freq_mat.keys(), 2):
-        for ct1, ct2 in combinations(weight_cell_types, 2):
-            distance = dist_matrix[cell_types.index(ct1)][cell_types.index(ct2)]
-            
-            weight1 = final_freq[weight_cell_types.index(ct1)] #indexing into weight cells cause need the specific ones 
-            weight2 = final_freq[weight_cell_types.index(ct2)]
-            #print(ct1, ct2)
-            #print(cell_types.index(ct1), " ",cell_types.index(ct2), " ")
-            #print(weight1)
-            #print(weight2)
-            weight = (weight1 + weight2)/2
-            #print('weight: ',weight)
-            #print('distance: ', distance)
-            weighted_dist += distance * weight
-        #print("totoal weighted is: ", weighted_dist)
-
-        ### TODO -> divide my number of combinations -> ie avg instead of sum ###
-
-
-        if weighted_dist < 0:
-            print("happening: ", weighted_dist)
-        term2_values.append(weighted_dist)
+        combos = combinations(weight_cell_types, 2)
+        weight_vec = []
+        distance_vec = []
+        for i1,i2 in combos:
+            weight_vec.append((final_freq[weight_cell_types.index(i1)]+final_freq[weight_cell_types.index(i2)])/2)
+            distance_vec.append((dist_matrix[cell_types.index(i1)][cell_types.index(i2)]))
+        #print("weight vec: ", weight_vec)
+        #print("distance vec: ",distance_vec)
+        term2_values.append(np.dot(np.array(weight_vec), np.array(distance_vec)))
+        #print("term2 vals: ", list(term2_values))
         #print("term2 cell no: ", i)
     return term2_values
+
 
 
 
@@ -184,7 +316,7 @@ def process_clusters(Y_clusters, S_cluster):
 
     for Y_cluster in Y_clusters:
 
-        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])]#[:5] #means choosing 5 cells 
+        adams1 = adams_comp[adams_comp.obs['cell_type_med'].isin([Y_cluster])]#[:50] #means choosing 5 cells 
         freq_mat = utils.make_frequency_matrix(adams1.obs['sc_hits'])
         print("freq mat")
         #print(freq_mat)
@@ -225,6 +357,11 @@ def process_clusters(Y_clusters, S_cluster):
             'files/scimilarity_trainingset_cellnum_AuthorLable_original.csv',
             'Cell_Type', 'Number of Samples', cell_types_to_consider)
 
+        '''
+        print(len(cell_types_to_consider))
+        print("cell types to consider: ", cell_types_to_consider)
+        print("og priors: ",priors) #so i guess these are already normalized 
+        '''
         final_results_per_cluster = []  # Store final results for each cell in this cluster
 
         cell = adams1.obsm['X_scimilarity']
@@ -262,12 +399,44 @@ def process_clusters(Y_clusters, S_cluster):
         
         #print("cell wise data")
         cell_wise_data_simple = freq_mat.values.tolist()
+        #this is the problem 
+        #evidence = sum(cell_wise_data_simple[cell_type] * priors[cell_type] for cell_type in cell_types_to_consider)
+        #freq_probabilities = {ct: (cell_wise_data_simple[ct] * priors[ct]) / evidence for ct in
+                                   #cell_types_to_consider}
+        
+        freq_probabilities = np.zeros((len(cell_wise_data_simple),len(cell_wise_data_simple[0])))
+        for r_index,row in enumerate(cell_wise_data_simple):
+            for c_index, col in enumerate(row):
+                cell_type = cell_types_to_consider[c_index] 
+                #print("cell type is: ", cell_type)
+                freq_probabilities[r_index][c_index] = cell_wise_data_simple[r_index][c_index]*priors[cell_type]
 
+                # TODO # normalize these values across a query cell -> take old code s
+        
+        #normalizing data again 
+        #print("not normailzed freq input w priors: ", freq_probabilities)
+        updated_freq_probs = np.zeros((len(cell_wise_data_simple),len(cell_wise_data_simple[0])))
+        for row_index,row in enumerate(freq_probabilities):
+            total_count = 0 
+            for cell in row:
+                total_count += cell
+            for i in range(len(row)):
+                updated_freq_probs[row_index][i] = float(row[i])/float(total_count)
+
+        #print("final frequency input w priors: ",updated_freq_probs)
+
+
+        #print("frequency matrix: ",cell_wise_data_simple)
+        #print("with priors: ", freq_probabilities)
+
+        
+        #print("priors", priors)
         '''
-        print("priors", priors)
         print("specific cell type: ", cell_type)
         print("prior for specific cell type: ", priors[cell_type])
-        print("cell wise data", freq_mat)'''
+        print("cell wise data", freq_mat)
+        '''
+        #incorpoorate priors -> 
 
 
         #include priors 
@@ -276,8 +445,12 @@ def process_clusters(Y_clusters, S_cluster):
         #print(len(cell_wise_data))
         #print(len(cell_wise_data[0]))
         #print(cell_wise_data_simple)
+        #print("Cell types to consider: ", cell_types_to_consider)
+        #cell_wise_with_priors = for ct in cell_types_to_consider
 
-        cell_wise_prob_simple = [np.array(cell) for cell in cell_wise_data_simple]
+        cell_wise_prob_simple = [np.array(cell) for cell in updated_freq_probs]
+        
+        #cell_wise_prob_simple = [np.array(cell) for cell in cell_wise_data_simple]
         entropy_arr = calculate_entropy(cell_wise_prob_simple)
         
         '''likelihoods = {}
@@ -311,7 +484,8 @@ def process_clusters(Y_clusters, S_cluster):
         #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell)
         print("before term 2")
         #term2_arr = calculate_term2_updated(dist_matrix,cell_types_to_consider,cell, freq_mat)
-        term2_arr = calculate_term2_speed_updated(dist_matrix,cell_types_to_consider,cell, freq_mat)
+        term2_arr = calculate_term2_speed_multiplcation(dist_matrix,cell_types_to_consider,cell, freq_mat)
+        #term2_arr = calculate_term2_numpy(dist_matrix,cell_types_to_consider,cell, freq_mat)
         print("after term 2")
         #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell) #apparently cell is an int 
         #print(freq_mat)
@@ -344,6 +518,28 @@ def create_df(term_dict):
     data_pad = {k:np.pad(v, pad_width=(0,maxsize-v.size,), mode='constant', constant_values=np.nan) for k,v in data.items()}
     df = pd.DataFrame(data_pad)
     return df
+
+def term2_outliers(term_dict):
+    T = term_dict['T cell'] 
+    outlier_10 = []
+    norm_10 = []
+    outlier_count = 0 
+    norm_count = 0 
+    print("printing length of T: ",len(T))
+    print("printing T: ",T)
+    '''for item in T:
+        if T[item] >= 1 and T[item] <=3:
+            norm_10.append(item)
+            norm_count += 1
+        elif T[item] >= 9 and T[item] <=11:
+            outlier_10.append(item)
+            outlier_count += 1
+        if norm_count >= 10 and outlier_count >= 10:
+            break'''
+    print("printing normal set: ", norm_count)
+    print("printing outlier set: ", outlier_count)
+        
+    
 
 def create_two_charts(term_dict,label):
     SLC = term_dict['SCLC-A']
@@ -419,6 +615,7 @@ print(df)'''
 
 
 results = create_df(term2_d)
+#term2_outliers(term2_d)
 #print("printing term2 results")
 #print(results)
 plt.figure(figsize=(16, 10))
