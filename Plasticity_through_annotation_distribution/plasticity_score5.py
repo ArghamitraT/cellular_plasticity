@@ -300,8 +300,6 @@ def calculate_term2_numpy(dist_matrix,cell_types,query_cell, freq_mat):
 
 def process_clusters(Y_clusters, S_cluster):
    
-    #data_path = 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2_75.h5ad'
-    #data_path = 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2.h5ad'
     data_path = os.path.join(os.getcwd(), 'data/MSK_tumor_data/adata_combined_mnnc_010920_SCANTN2_150.h5ad')
     gaussian_path = os.path.join(os.getcwd(), 'data/scimilarity_data_division/fitted_gaussian_noGMM')
     bhatt_dist_path = os.path.join(os.getcwd(), 'data/scimilarity_data_division/bhatt_dist_NO_GMM.npy')
@@ -357,11 +355,7 @@ def process_clusters(Y_clusters, S_cluster):
             'files/scimilarity_trainingset_cellnum_AuthorLable_original.csv',
             'Cell_Type', 'Number of Samples', cell_types_to_consider)
 
-        '''
-        print(len(cell_types_to_consider))
-        print("cell types to consider: ", cell_types_to_consider)
-        print("og priors: ",priors) #so i guess these are already normalized 
-        '''
+   
         final_results_per_cluster = []  # Store final results for each cell in this cluster
 
         cell = adams1.obsm['X_scimilarity']
@@ -387,34 +381,22 @@ def process_clusters(Y_clusters, S_cluster):
 
         # fetch information for every cell
         num_cells = len(next(iter(posterior_probabilities.values())))
-        # Initialize a dictionary to store cell-wise data
-        #cell_wise_data = [[] for _ in range(num_cells)]
-
-        # Iterate over each row and distribute its data to the respective cells
-        #for row in posterior_probabilities.values():
-        #    for cell_index, cell_value in enumerate(row):
-        #        cell_wise_data[cell_index].append(cell_value)
+ 
         
         # 5. Calculate Entropy (Term 1)
         
         #print("cell wise data")
         cell_wise_data_simple = freq_mat.values.tolist()
-        #this is the problem 
-        #evidence = sum(cell_wise_data_simple[cell_type] * priors[cell_type] for cell_type in cell_types_to_consider)
-        #freq_probabilities = {ct: (cell_wise_data_simple[ct] * priors[ct]) / evidence for ct in
-                                   #cell_types_to_consider}
         
+        #incorporating priors into data -> this is inverse version 
         freq_probabilities = np.zeros((len(cell_wise_data_simple),len(cell_wise_data_simple[0])))
         for r_index,row in enumerate(cell_wise_data_simple):
             for c_index, col in enumerate(row):
                 cell_type = cell_types_to_consider[c_index] 
                 #print("cell type is: ", cell_type)
-                freq_probabilities[r_index][c_index] = cell_wise_data_simple[r_index][c_index]*priors[cell_type]
-
-                # TODO # normalize these values across a query cell -> take old code s
+                freq_probabilities[r_index][c_index] = cell_wise_data_simple[r_index][c_index]*(1/priors[cell_type])
         
-        #normalizing data again 
-        #print("not normailzed freq input w priors: ", freq_probabilities)
+        #normalizing P(i) data again 
         updated_freq_probs = np.zeros((len(cell_wise_data_simple),len(cell_wise_data_simple[0])))
         for row_index,row in enumerate(freq_probabilities):
             total_count = 0 
@@ -423,40 +405,14 @@ def process_clusters(Y_clusters, S_cluster):
             for i in range(len(row)):
                 updated_freq_probs[row_index][i] = float(row[i])/float(total_count)
 
-        #print("final frequency input w priors: ",updated_freq_probs)
+        #version incorporating priors below 
+        #cell_wise_prob_simple = [np.array(cell) for cell in updated_freq_probs]
 
-
-        #print("frequency matrix: ",cell_wise_data_simple)
-        #print("with priors: ", freq_probabilities)
-
+        #P(i) value without priors 
+        cell_wise_prob_simple = [np.array(cell) for cell in cell_wise_data_simple]
         
-        #print("priors", priors)
-        '''
-        print("specific cell type: ", cell_type)
-        print("prior for specific cell type: ", priors[cell_type])
-        print("cell wise data", freq_mat)
-        '''
-        #incorpoorate priors -> 
-
-
-        #include priors 
-        
-
-        #print(len(cell_wise_data))
-        #print(len(cell_wise_data[0]))
-        #print(cell_wise_data_simple)
-        #print("Cell types to consider: ", cell_types_to_consider)
-        #cell_wise_with_priors = for ct in cell_types_to_consider
-
-        cell_wise_prob_simple = [np.array(cell) for cell in updated_freq_probs]
-        
-        #cell_wise_prob_simple = [np.array(cell) for cell in cell_wise_data_simple]
         entropy_arr = calculate_entropy(cell_wise_prob_simple)
         
-        '''likelihoods = {}
-        for cell_type in cell_types_to_consider:
-            pdf_value = multivariate_normal.pdf(cell)
-            likelihoods[cell_type] = pdf_value + epsilon'''
 
         # 6. Calculate Term 2
         cell = adams1.obsm['X_scimilarity']
@@ -468,27 +424,12 @@ def process_clusters(Y_clusters, S_cluster):
             likelihoods[cell_type] = pdf_value + epsilon
         log_densities = {ct: np.log(likelihoods[ct] + epsilon) for ct in cell_types_to_consider}
         dist_matrix = np.load(bhatt_dist_path)
-        #print("printing dist matrix: ", dist_matrix)
-        #build normalized dist_matrix
-        '''dist_matrix_normalized = np.zeros((len(dist_matrix),len(dist_matrix)))
-        for i,row in enumerate(dist_matrix):
-            total = np.sum(row)
-            for j, value in enumerate(row):
-                dist_matrix_normalized[i][j] = value/total
-        #print("printing dist matrix normalized: ", dist_matrix_normalized)
-        #print("printing distance matrix: ", dist_matrix)
-        print("norm freq matrix: ", dist_matrix)'''
 
-        #print("printing a specific spot in freq mat: ", freq_mat_normalized)
-        #print("what is freq_mat?: ", freq_mat_normalized.values.tolist()[0][0])
-        #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell)
         print("before term 2")
         #term2_arr = calculate_term2_updated(dist_matrix,cell_types_to_consider,cell, freq_mat)
         term2_arr = calculate_term2_speed_multiplcation(dist_matrix,cell_types_to_consider,cell, freq_mat)
         #term2_arr = calculate_term2_numpy(dist_matrix,cell_types_to_consider,cell, freq_mat)
-        print("after term 2")
-        #term2_arr = calculate_term2(dist_matrix, log_densities, cell_types_to_consider, cell) #apparently cell is an int 
-        #print(freq_mat)
+      
         # 7. Calculate Final Result
         plasticity_score_arr = [e * t2 for e, t2 in zip(entropy_arr, term2_arr)]
 
@@ -519,6 +460,7 @@ def create_df(term_dict):
     df = pd.DataFrame(data_pad)
     return df
 
+#used for analysis purposes 
 def term2_outliers(term_dict):
     T = term_dict['T cell'] 
     outlier_10 = []
@@ -527,15 +469,6 @@ def term2_outliers(term_dict):
     norm_count = 0 
     print("printing length of T: ",len(T))
     print("printing T: ",T)
-    '''for item in T:
-        if T[item] >= 1 and T[item] <=3:
-            norm_10.append(item)
-            norm_count += 1
-        elif T[item] >= 9 and T[item] <=11:
-            outlier_10.append(item)
-            outlier_count += 1
-        if norm_count >= 10 and outlier_count >= 10:
-            break'''
     print("printing normal set: ", norm_count)
     print("printing outlier set: ", outlier_count)
         
@@ -567,51 +500,7 @@ def create_two_charts(term_dict,label):
     print("done")
     return "done"
 
-'''pd.DataFrame.from_dict(entropy_d).to_csv('entropy_d.csv', index=False)
-pd.DataFrame.from_dict(term2_d).to_csv('term2_d.csv', index=False)
-pd.DataFrame.from_dict(plasticity_score_d).to_csv('plasticity_score_d.csv', index=False)'''
-'''results = pd.Series(entropy_d)
-#results = pd.DataFrame(results_temp)
-print("printing entropy")
-print(results)
-plt.figure(figsize=(16, 10))
-colors = ['skyblue', 'lightgreen', 'violet']  # Define colors for each cluster
-sns.violinplot(data=results)
-plt.xticks(ticks=range(len(results.index)), labels=results.index)
-plt.xlabel("Cell clusters")
-plt.ylabel("entropy")
-plt.title("MSK Lung cancer data")
-plt.grid()
-plt.savefig("figures/"+utils_AT.create_image_name("entropy"))'''
-#plt.savefig("entropy_test.png")
-#plt.show()th
 
-
-
-#print(term2_d)
-'''SLC = term2_d['SCLC-A']
-T = term2_d['T cell']
-#print(SLC)
-print(len(SLC))
-T.append(.625)
-print(len(T))
-data = {
-    'SLC-A' : np.array(SLC),
-    'T-cell' : np.array(T)
-}
-
-maxsize = max([a.size for a in data.values()])
-data_pad = {k:np.pad(v, pad_width=(0,maxsize-v.size,), mode='constant', constant_values=np.nan) for k,v in data.items()}
-df = pd.DataFrame(data_pad)
-print(df)'''
-#results = pd.DataFrame(SLC,T).tranpose()
-#results = results.set_axis(['SCLC-A','T cell'], axis=1)
-#results = pd.DataFrame.from_dict(term2_d)
-
-
-#junk = create_two_charts(entropy_d,"entropy")
-#junk1 = create_two_charts(plasticity_score_d,"plasticity_score")
-#junk2 = create_two_charts(term2_d,"term2")
 
 
 results = create_df(term2_d)
@@ -665,13 +554,4 @@ plt.savefig("figures/"+utils.create_image_name("plasticty_score"))
 print()
 
 
-# for i, cluster in enumerate(Y_clusters):
-#     sns.violinplot(data=results[cluster], color=colors[i])
-# Now `results` contains the final results for each cluster in Y_clusters
 
-# Plot for Cluster 1
-#plt.subplot(1, 2, 1)  # (number of rows, number of columns, index of the current plot)
-#sns.violinplot(data=results, color='skyblue')
-#
-#sns.violinplot(x = results.index, y=results, color='skyblue')
-#plt.xticks(rotation=90)
